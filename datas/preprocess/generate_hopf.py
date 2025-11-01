@@ -112,16 +112,15 @@ def hopf_simulation():
         ax.plot(time_dataset[i], X1_dataset[i], lw=1.0, label='x(t)')
         ax.plot(time_dataset[i], X2_dataset[i], lw=1.0, linestyle='--', label='y(t)')
         ax.set_xlabel("time"); ax.set_ylabel("state")
-    # 凡例は1つだけ外に
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc='upper right')
     fig.suptitle("All cases: x(t) & y(t) vs time (last 2000 points per case)")
     fig.tight_layout()
     fig.subplots_adjust(top=0.92, right=0.92)
-    plot_path = "all_cases_xy_vs_time.png"
+    plot_path = "all_hopf_cases_xy_vs_time.png"
     fig.savefig(plot_path, dpi=200)
     plt.close(fig)
-    print(f"プロット保存: {plot_path}")
+    print(f"saved figure: {plot_path}")
 
 if __name__ == "__main__": 
     hopf_simulation()

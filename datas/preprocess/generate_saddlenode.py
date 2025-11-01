@@ -96,5 +96,21 @@ def saddlenode_simulation():
     csv_path = '../alldata_saddlenode.csv'
     df_saddlenode.to_csv(csv_path, index = False)
 
+    fig, axes = plt.subplots(4, 5, figsize=(18, 10), sharex=False, sharey=False)
+    axes = axes.ravel()
+    for i in range(20):
+        ax = axes[i]
+        ax.plot(time_dataset[i], X_dataset[i], lw=1.0, label='x(t)')
+        ax.set_xlabel("time"); ax.set_ylabel("state")
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc='upper right')
+    fig.suptitle("All cases: x(t) vs time (last 2000 points per case)")
+    fig.tight_layout()
+    fig.subplots_adjust(top=0.92, right=0.92)
+    plot_path = "all_saddlenode_cases_xy_vs_time.png"
+    fig.savefig(plot_path, dpi=200)
+    plt.close(fig)
+    print(f"saved figure: {plot_path}")
+
 if __name__ == "__main__": 
     saddlenode_simulation()

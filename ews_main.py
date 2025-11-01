@@ -11,8 +11,41 @@ from ews_module import MaxEigenvalue_DMD
 from ews_module import EWS_DeepLearning
 from ews_module import Koopman_Resilience
 
-def calculate_ews(time, X, skip = 20):
+def select_parameter_rbf_and_laplacian(X, type_dmd = 'rbf', dim_delay = 400, low_rank = 0.9):
+    candidates_parameter = [0.1, 0.01, 0.005, 0.001, 0.0005, 0.0001]
+    
+    best_loss = float('inf')
+    best_param = 0.0
+    for param in candidates_parameter:
+        koopman_estimater = Koopman_Resilience(X, type_dmd = type_dmd, dim_delay = dim_delay, low_rank = low_rank, kernel_params = {'gamma': param})
+        loss = np.abs(koopman_estimater.resKMD())
+        if loss < best_loss:
+            best_loss = loss
+            best_param = param
+
+    return param
+    
+def select_parameter_poly(X, type_dmd = 'poly', dim_delay = 400, low_rank = 0.9):
+    candidates_gamma = [1.0, 0.1, 0.01]
+    candidates_degree = [2.0, 3.0, 4.0]
+    
+    best_loss = float('inf')
+    best_gamma = 0.0
+    best_degree = 0
+    for gamma in candidates_gamma:
+        for degree in candidates_degree:
+            koopman_estimater = Koopman_Resilience(X, type_dmd = type_dmd, dim_delay = dim_delay, low_rank = low_rank, kernel_params = {'gamma': gamma, 'coef0': 1, 'degree': degree})
+            loss = np.abs(koopman_estimater.resKMD())
+            if loss < best_loss:
+                best_loss = loss
+                best_gamma = gamma
+                best_degree = degree
+
+    return best_gamma, best_degree
+
+def calculate_ews(time, X, skip = 50):
     window_length = int(X.shape[1]/2)
+    dim_delay = 400
 
     time_select = []
     ews_var = []
@@ -26,6 +59,8 @@ def calculate_ews(time, X, skip = 20):
 
     dl_model = EWS_DeepLearning()
     for i in range(int((window_length + 1)/skip)):
+        print('{}/{}'.format(i + 1, int((window_length + 1)/skip)))
+
         time_select.append(time[:, (i*skip + window_length)])
         Xwindow = X[:, i*skip:(i*skip + window_length)]
 
@@ -39,26 +74,31 @@ def calculate_ews(time, X, skip = 20):
             ac_model = Stochastic_Resilience(Xwindow[0, :].reshape([1, -1]), type_ews = 'lag1-ac')
             ews_ac.append(ac_model())
 
-        ews_eig.append(MaxEigenvalue_DMD(Xwindow, dim_delay = 300))
+        ews_eig.append(np.abs(MaxEigenvalue_DMD(Xwindow, dim_delay = dim_delay)))
 
-        if Xwindow.shape[0] == 1:
-            dl_model(Xwindow)
-            ews_dl.append(dl_model.predict())
+        if Xwindow.shape[1] > 1500:
+            dl_model(Xwindow[0, -1500:].reshape([1, -1]))
         else:
             dl_model(Xwindow[0].reshape([1, -1]))
-            ews_dl.append(dl_model.predict())
+        ews_dl.append(dl_model.predict())
 
-        koopman_byvanilla = Koopman_Resilience(Xwindow, type_dmd = 'vanilla', dim_delay = 300)
-        ews_res1.append(koopman_byvanilla.resKMD())
+        koopman_byvanilla = Koopman_Resilience(Xwindow, type_dmd = 'vanilla', dim_delay = dim_delay)
+        ews_res1.append(np.abs(koopman_byvanilla.resKMD()))
 
-        koopman_byrbf = Koopman_Resilience(Xwindow, type_dmd = 'rbf', dim_delay = 300, kernel_params = {'gamma': 0.001})
-        ews_res2.append(koopman_byrbf.resKMD())
+        if i == 0:
+            gamma_rbf = select_parameter_rbf_and_laplacian(Xwindow, type_dmd = 'rbf', dim_delay = dim_delay)
+        koopman_byrbf = Koopman_Resilience(Xwindow, type_dmd = 'rbf', dim_delay = dim_delay, kernel_params = {'gamma': gamma_rbf})
+        ews_res2.append(np.abs(koopman_byrbf.resKMD()))
 
-        koopman_bylaplacian = Koopman_Resilience(Xwindow, type_dmd = 'laplacian', dim_delay = 300, kernel_params = {'gamma': 0.001})
-        ews_res3.append(koopman_bylaplacian.resKMD())
+        if i == 0:
+            gamma_laplacian = select_parameter_rbf_and_laplacian(Xwindow, type_dmd = 'laplacian', dim_delay = dim_delay)
+        koopman_bylaplacian = Koopman_Resilience(Xwindow, type_dmd = 'laplacian', dim_delay = dim_delay, kernel_params = {'gamma': gamma_laplacian})
+        ews_res3.append(np.abs(koopman_bylaplacian.resKMD()))
 
-        koopman_bypoly = Koopman_Resilience(Xwindow, type_dmd = 'poly', dim_delay = 300, kernel_params = {'gamma': 1, 'coef0': 1, 'degree': 4})
-        ews_res4.append(koopman_bypoly.resKMD())
+        if i == 0:
+            gamma_poly, degree_poly = select_parameter_poly(Xwindow, type_dmd = 'poly', dim_delay = dim_delay)
+        koopman_bypoly = Koopman_Resilience(Xwindow, type_dmd = 'poly', dim_delay = dim_delay, kernel_params = {'gamma': gamma_poly, 'coef0': 1, 'degree': degree_poly})
+        ews_res4.append(np.abs(koopman_bypoly.resKMD()))
 
     time_select = np.array(time_select)
     ews_var = np.array(ews_var)
@@ -106,7 +146,7 @@ def calculate_roc(name):
         else:
             X = df_select['x'].to_numpy().reshape([1, -1])
         
-        var, ac, eig, dl, res1, res2, res3, res4 = calculate_ews(time, X)
+        var, ac, eig, dl, res1, res2, res3, res4 = calculate_ews(time, X, skip = 50)
         kendalls_var.append(var)
         kendalls_ac.append(ac)
         kendalls_eig.append(eig)
